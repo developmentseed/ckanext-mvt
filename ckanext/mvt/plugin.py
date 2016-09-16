@@ -12,6 +12,7 @@ import tempfile
 import os
 import logging
 import lib
+import mimetypes
 
 log = logging.getLogger(__name__)
 
@@ -40,9 +41,15 @@ def _celery_task(resource_id, action, tempdir):
 
 
 class MvtPlugin(plugins.SingletonPlugin):
+
+    plugins.implements(plugins.IConfigurer, inherit=True)
     plugins.implements(plugins.IResourceController, inherit=True)
 
     TEMPDIR = os.path.join(os.path.dirname(__file__), '..', 'tmp')
+
+    # IConfigurer
+    def update_config(self, config):
+        mimetypes.add_type('application/geo+json', '.geojson')
 
     # IResourceController
     def after_create(self, context, resource):
