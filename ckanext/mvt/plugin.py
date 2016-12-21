@@ -84,13 +84,28 @@ class MvtViewPlugin(plugins.SingletonPlugin):
             'name': 'mvt_view',
             'title': 'Map View',
             'icon': 'globe',
-            'iframed': True,
+            'iframed': False,
             'always_available': False
         }
 
     def setup_template_variables(self, context, data_dict):
+        layers = toolkit.aslist(config.get('ckanext.mvt.mapbox.style', ''))
+        labels = toolkit.aslist(config.get('ckanext.mvt.mapbox.style_label', ''))
+        if len(labels) != len(layers):
+            log.warn('The config file contains {0} layer id\'s and {1} labels. The extension needs an equal amount and can only use the first {2}'.format(len(labels), len(layers), min(len(layers),len(labels))))
+
+        baseLayers = [];
+        for i in range(min(len(layers),len(labels))):
+            baseLayers.append({"id": layers[i], "label": labels[i]})
+
         return {
-            'tilejson': data_dict['resource'].get('tilejson', '')
+            'tilejson': data_dict['resource'].get('tilejson', ''),
+            'mapbox': {
+                'account': config.get('ckanext.mvt.mapbox.account', ''),
+                'key': config.get('ckanext.mvt.mapbox.key', ''),
+                'defaultStyle': toolkit.aslist(config.get('ckanext.mvt.mapbox.style', ''))[0],
+                'styles': baseLayers
+            }
         }
 
 
