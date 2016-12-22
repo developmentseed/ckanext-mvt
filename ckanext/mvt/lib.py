@@ -108,11 +108,15 @@ class TileProcessor:
        if not os.path.isdir(tempdir):
            os.makedirs(tempdir)
 
-    def _download_file(self, url):
+    def _download_file(self, url, is_upload):
         tmpname = '{0}.geojson'.format(uuid.uuid4())
-        response = requests.get(url, headers = {
-            'Authorization': self.ckan.apikey
-        }, stream = True)
+        response = None;
+        if (is_upload):
+            response = requests.get(url, headers = {
+                'Authorization': self.ckan.apikey
+            })
+        else:
+            response = requests.get(url)
 
         if response.status_code != 200:
             raise BadResourceFileException("{0} could not be downloaded".format(url))
@@ -120,7 +124,7 @@ class TileProcessor:
             print "{0} was downloaded".format(url)
 
         with open(os.path.join(self.tempdir, tmpname), 'wb') as out_file:
-            shutil.copyfileobj(response.raw, out_file)
+            json.dump(response.json(), out_file)
 
         return tmpname
 
@@ -238,11 +242,12 @@ class TileProcessor:
         """
         try:
             resource = self.ckan.action.resource_show(id=resource_id)
+            is_upload = resource['url_type'] == 'upload'
             file_format = resource['format'].upper()
 
             if file_format == 'GEOJSON':
                 # First download the file
-                file = self._download_file(resource['url'])
+                file = self._download_file(resource['url'], is_upload)
                 filepath = os.path.join(self.tempdir, file)
 
                 # Checksum the file contents and see if it matches the resource checksum
