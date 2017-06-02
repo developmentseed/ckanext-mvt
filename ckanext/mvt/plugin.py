@@ -105,7 +105,8 @@ class MvtViewPlugin(plugins.SingletonPlugin):
                 'key': config.get('ckanext.mvt.mapbox.key', ''),
                 'defaultStyle': toolkit.aslist(config.get('ckanext.mvt.mapbox.style', ''))[0],
                 'styles': baseLayers
-            }
+            },
+            'is_processing': data_dict['resource'].get('is_processing', 0)
         }
 
 

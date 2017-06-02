@@ -255,6 +255,10 @@ class TileProcessor:
                 checksum_from_file = self.cache.get_checksum(resource_id)
 
                 if checksum != checksum_from_file:
+                    # Mark that the resource is processing
+                    resource['is_processing'] = 1
+                    self._update_resource(resource)
+
                     # If an s3url exists, we want to delete the tiles there and
                     # push at another url
                     old_url = self.cache.get_s3url(resource_id)
@@ -267,8 +271,9 @@ class TileProcessor:
                     s3url = self._upload_to_s3(mvtfile, extent, resource_id)
                     self.cache.set_s3url(resource_id, s3url)
 
-                    # Update the s3url
+                    # Update the s3url and is_processing flag
                     resource['tilejson'] = s3url
+                    resource['is_processing'] = 0
                     self._update_resource(resource)
 
                     # Update the checksum if everything works
@@ -291,6 +296,10 @@ class TileProcessor:
 
         except (S3Exception, BadResourceFileException, NotFound, CKANAPIException) as e:
             print e
+            # Mark that the resource errored
+            resource = self.ckan.action.resource_show(id=resource_id)
+            resource['is_processing'] = -1
+            self._update_resource(resource)
             return
 
     def delete(self, resource_id):
