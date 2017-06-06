@@ -42,6 +42,13 @@ class BadResourceFileException(Exception):
     def __str__(self):
         return self.extra_msg
 
+class LargeResourceFileException(Exception):
+    def __init__(self, extra_msg=None):
+        self.extra_msg = extra_msg
+
+    def __str__(self):
+        return self.extra_msg
+
 class S3Exception(Exception):
     def __init__(self, extra_msg=None):
         self.extra_msg = extra_msg
@@ -111,9 +118,9 @@ class TileProcessor:
     * Creates/Updates tiles for current resources
     * Deletes tiles for deleted resource
     """
-    def __init__(self, ckan, s3config, tempdir):
+    def __init__(self, ckan, config, tempdir):
        self.ckan = ckan
-       self.s3config = s3config
+       self.config = config
        self.tempdir = tempdir
        self.cache = CacheHandler(tempdir)
        print "from celery temdpir is {}".format(tempdir)
@@ -179,13 +186,13 @@ class TileProcessor:
         """
         s3 = boto3.resource(
             's3',
-            aws_access_key_id= self.s3config['access_key'],
-            aws_secret_access_key= self.s3config['secret_key']
+            aws_access_key_id= self.config['access_key'],
+            aws_secret_access_key= self.config['secret_key']
         )
 
         # Upload tiles
         revision = uuid.uuid4();
-        bucket = self.s3config['bucket']
+        bucket = self.config['bucket']
         prefix = "tiles/{0}-{1}".format(
             resource_id,
             revision
@@ -195,8 +202,8 @@ class TileProcessor:
         httptileurl = "https://{0}.s3.amazonaws.com/{1}/{{z}}/{{x}}/{{y}}.pbf".format(bucket, prefix)
 
         aws_env = os.environ.copy()
-        aws_env['AWS_ACCESS_KEY_ID'] = self.s3config['access_key']
-        aws_env['AWS_SECRET_ACCESS_KEY'] = self.s3config['secret_key']
+        aws_env['AWS_ACCESS_KEY_ID'] = self.config['access_key']
+        aws_env['AWS_SECRET_ACCESS_KEY'] = self.config['secret_key']
 
         returncode = call([
             'mapbox-tile-copy', '--timeout', '10000', filepath, tileurl
@@ -228,10 +235,10 @@ class TileProcessor:
             old_resource_url = matches.group(2) #resoure_id-revision
             s3 = boto3.resource(
                 's3',
-                aws_access_key_id= self.s3config['access_key'],
-                aws_secret_access_key= self.s3config['secret_key']
+                aws_access_key_id= self.config['access_key'],
+                aws_secret_access_key= self.config['secret_key']
             )
-            bucket = s3.Bucket(self.s3config['bucket'])
+            bucket = s3.Bucket(self.config['bucket'])
             bucket.objects.filter(Prefix='tiles/{}'.format(old_resource_url)).delete()
         else:
             log.info("Could not match {}".format(tilejson_url))
@@ -244,6 +251,12 @@ class TileProcessor:
         ''')
         row = cursor.fetchone()
         return row[0]
+
+    def _check_size(self, filepath):
+        size = os.path.getsize(filepath)
+        max_size = int(self.config['max_size'])
+        if size > max_size:
+            raise LargeResourceFileException('File too large to process: {} > {}'.format(size, max_size))
 
     def update(self, resource_id):
         """
@@ -262,6 +275,9 @@ class TileProcessor:
                 file = self._download_file(resource['url'], is_upload)
                 filepath = os.path.join(self.tempdir, file)
 
+                # Check file size 
+                self._check_size(filepath)
+
                 # Checksum the file contents and see if it matches the resource checksum
                 checksum = _md5checksum(filepath)
                 checksum_from_file = self.cache.get_checksum(resource_id)
@@ -273,7 +289,6 @@ class TileProcessor:
                     # If an s3url exists, we want to delete the tiles there and
                     # push at another url
                     old_url = self.cache.get_s3url(resource_id)
-
                     log.info("old: {0} != new: {1}".format(checksum_from_file, checksum))
 
                     # Generate tiles
@@ -303,16 +318,20 @@ class TileProcessor:
                 else:
                     log.info("content hasn't changed")
 
-                # Delete the downloaded resource
-                os.remove(filepath)
-
+        except LargeResourceFileException as e:
+            # Mark that the resource is too large 
+            self.cache.set_job_status(resource_id, 'max_size');
+            raise
 
         except Exception as e:
-            print e
-
             # Mark that the resource errored
             self.cache.set_job_status(resource_id, 'error');
-            return
+            raise
+
+        finally:
+            # Delete the downloaded resource
+            os.remove(filepath)
+
 
     def delete(self, resource_id):
         """
@@ -328,5 +347,4 @@ class TileProcessor:
                 self.cache.delete(resource_id)
 
         except Exception as e:
-            print e
-            return
+            raise

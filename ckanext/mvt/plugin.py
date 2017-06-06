@@ -19,10 +19,11 @@ log = logging.getLogger(__name__)
 def _celery_task(resource_id, action, tempdir):
     site_url = config.get('ckan.site_url', 'http://localhost/')
     apikey = model.User.get('default').apikey
-    s3config = {
+    mvtconfig = {
         'bucket': config.get('ckanext.mvt.s3.bucket'),
         'access_key': config.get('ckanext.mvt.s3.access_key'),
         'secret_key': config.get('ckanext.mvt.s3.secret_key'),
+        'max_size': config.get('ckanext.mvt.max_size')
     }
 
     celery.send_task(
@@ -31,7 +32,7 @@ def _celery_task(resource_id, action, tempdir):
             resource_id,
             site_url,
             apikey,
-            s3config,
+            mvtconfig,
             tempdir,
             action
         ],

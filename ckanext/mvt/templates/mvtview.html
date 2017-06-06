@@ -95,6 +95,8 @@
     var is_processing = "{{h.literal(resource_job_status)}}"
     if (is_processing === 'processing') {
       wrapper.innerHTML = 'Data processing...Preview not yet available.'
+    } else if (is_processing === 'max_size') {
+      wrapper.innerHTML = 'The resource size is too large to be processed.'
     } else if (is_processing === 'error') {
       wrapper.innerHTML = 'There was an error processing the data. Try uploading the resource again.'
     }
