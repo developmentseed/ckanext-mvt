@@ -25,19 +25,18 @@ def _celery_task(resource_id, action, tempdir):
         'secret_key': config.get('ckanext.mvt.s3.secret_key'),
     }
 
-    if action == 'create' or action == 'update' or action == 'delete':
-        celery.send_task(
-            'mvt.process_resource',
-            args=[
-                resource_id,
-                site_url,
-                apikey,
-                s3config,
-                tempdir,
-                action
-            ],
-            task_id='{}-{}'.format(str(uuid.uuid4()), action)
-        )
+    celery.send_task(
+        'mvt.process_resource',
+        args=[
+            resource_id,
+            site_url,
+            apikey,
+            s3config,
+            tempdir,
+            action
+        ],
+        task_id='{}-{}'.format(str(uuid.uuid4()), action)
+    )
 
 
 class MvtPlugin(plugins.SingletonPlugin):
@@ -72,6 +71,8 @@ class MvtViewPlugin(plugins.SingletonPlugin):
     plugins.implements(plugins.IConfigurer, inherit=True)
     plugins.implements(plugins.IResourceView, inherit=True)
 
+    TEMPDIR = os.path.join(os.path.dirname(__file__), '..', 'tmp')
+
     # IConfigurer
 
     def update_config(self, config_):
@@ -91,6 +92,7 @@ class MvtViewPlugin(plugins.SingletonPlugin):
     def setup_template_variables(self, context, data_dict):
         layers = toolkit.aslist(config.get('ckanext.mvt.mapbox.style', ''))
         labels = toolkit.aslist(config.get('ckanext.mvt.mapbox.style_label', ''))
+        cache = lib.CacheHandler(MvtPlugin.TEMPDIR)
         if len(labels) != len(layers):
             log.warn('The config file contains {0} layer id\'s and {1} labels. The extension needs an equal amount and can only use the first {2}'.format(len(labels), len(layers), min(len(layers),len(labels))))
 
@@ -106,7 +108,7 @@ class MvtViewPlugin(plugins.SingletonPlugin):
                 'defaultStyle': toolkit.aslist(config.get('ckanext.mvt.mapbox.style', ''))[0],
                 'styles': baseLayers
             },
-            'is_processing': data_dict['resource'].get('is_processing', 0)
+            'resource_job_status': cache.get_job_status(data_dict['resource'].get('id'))
         }
 
 

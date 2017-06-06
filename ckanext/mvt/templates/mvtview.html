@@ -92,11 +92,10 @@
 
   } else {
     var wrapper = document.getElementById('mvt-wrapper');
-    var is_processing = "{{h.literal(is_processing)}}"
-    console.log(is_processing)
-    if (is_processing == '1') {
+    var is_processing = "{{h.literal(resource_job_status)}}"
+    if (is_processing === 'processing') {
       wrapper.innerHTML = 'Data processing...Preview not yet available.'
-    } else if (is_processing == '-1') {
+    } else if (is_processing === 'error') {
       wrapper.innerHTML = 'There was an error processing the data. Try uploading the resource again.'
     }
  }
