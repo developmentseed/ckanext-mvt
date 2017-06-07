@@ -19,25 +19,25 @@ log = logging.getLogger(__name__)
 def _celery_task(resource_id, action, tempdir):
     site_url = config.get('ckan.site_url', 'http://localhost/')
     apikey = model.User.get('default').apikey
-    s3config = {
+    mvtconfig = {
         'bucket': config.get('ckanext.mvt.s3.bucket'),
         'access_key': config.get('ckanext.mvt.s3.access_key'),
         'secret_key': config.get('ckanext.mvt.s3.secret_key'),
+        'max_size': config.get('ckanext.mvt.max_size')
     }
 
-    if action == 'create' or action == 'update' or action == 'delete':
-        celery.send_task(
-            'mvt.process_resource',
-            args=[
-                resource_id,
-                site_url,
-                apikey,
-                s3config,
-                tempdir,
-                action
-            ],
-            task_id='{}-{}'.format(str(uuid.uuid4()), action)
-        )
+    celery.send_task(
+        'mvt.process_resource',
+        args=[
+            resource_id,
+            site_url,
+            apikey,
+            mvtconfig,
+            tempdir,
+            action
+        ],
+        task_id='{}-{}'.format(str(uuid.uuid4()), action)
+    )
 
 
 class MvtPlugin(plugins.SingletonPlugin):
@@ -72,6 +72,8 @@ class MvtViewPlugin(plugins.SingletonPlugin):
     plugins.implements(plugins.IConfigurer, inherit=True)
     plugins.implements(plugins.IResourceView, inherit=True)
 
+    TEMPDIR = os.path.join(os.path.dirname(__file__), '..', 'tmp')
+
     # IConfigurer
 
     def update_config(self, config_):
@@ -91,6 +93,7 @@ class MvtViewPlugin(plugins.SingletonPlugin):
     def setup_template_variables(self, context, data_dict):
         layers = toolkit.aslist(config.get('ckanext.mvt.mapbox.style', ''))
         labels = toolkit.aslist(config.get('ckanext.mvt.mapbox.style_label', ''))
+        cache = lib.CacheHandler(MvtPlugin.TEMPDIR)
         if len(labels) != len(layers):
             log.warn('The config file contains {0} layer id\'s and {1} labels. The extension needs an equal amount and can only use the first {2}'.format(len(labels), len(layers), min(len(layers),len(labels))))
 
@@ -105,7 +108,8 @@ class MvtViewPlugin(plugins.SingletonPlugin):
                 'key': config.get('ckanext.mvt.mapbox.key', ''),
                 'defaultStyle': toolkit.aslist(config.get('ckanext.mvt.mapbox.style', ''))[0],
                 'styles': baseLayers
-            }
+            },
+            'resource_job_status': cache.get_job_status(data_dict['resource'].get('id'))
         }
 
 
